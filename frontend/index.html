@@ -12,6 +12,9 @@
         <h1>Gestão Escolar</h1>
         <div class="search-container">
             <input type="text" id="searchInput" placeholder="Buscar aluno..." aria-label="Buscar aluno">
+            <button class="btn-primary" onclick="openModal()" aria-label="Adicionar novo aluno">
+                Novo Aluno
+            </button>
         </div>
     </header>
 
@@ -31,6 +34,41 @@
             <!-- Conteúdo principal será carregado aqui -->
         </section>
     </main>
+
+    <!-- Modal de Cadastro de Aluno -->
+    <div class="modal" id="registrationModal">
+        <div class="modal-content">
+            <h2>Cadastro de Aluno</h2>
+            <form id="studentForm">
+                <div class="form-group">
+                    <label for="nome">Nome*</label>
+                    <input type="text" id="nome" name="nome" required minlength="3" maxlength="80" aria-label="Nome do aluno">
+                </div>
+                
+                <div class="form-group">
+                    <label for="data_nascimento">Data de Nascimento*</label>
+                    <input type="date" id="data_nascimento" name="data_nascimento" required aria-label="Data de nascimento">
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" aria-label="Email do aluno">
+                </div>
+                
+                <div class="form-group">
+                    <label for="turma">Turma</label>
+                    <select id="turma" name="turma_id" aria-label="Selecione a turma">
+                        <option value="">Selecione uma turma</option>
+                    </select>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
+                    <button type="submit" class="btn-primary">Cadastrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script src="scripts.js"></script>
 </body>
