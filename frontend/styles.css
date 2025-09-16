@@ -136,3 +136,35 @@ body {
     gap: 1rem;
     align-items: center;
 }
+
+/* Backend status banner */
+.backend-status {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    z-index: 1100;
+}
+
+.hidden { display: none !important; }
+
+/* Toast notifications */
+.toast {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    background: #111827;
+    color: white;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1200;
+}

@@ -6,17 +6,7 @@ from pydantic import BaseModel, EmailStr
 from datetime import date
 from models import Aluno, Turma
 from database import engine, SessionLocal
-import modelsapi import FastAPI, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Optional
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from datetime import date
-from models import Aluno, Turma
-from database import engine, SessionLocal
 import models
-
-from pydantic import EmailStr, constr
 
 class AlunoCreate(BaseModel):
     nome: str
@@ -27,6 +17,10 @@ class AlunoCreate(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class AlunoResponse(AlunoCreate):
+    id: int
 
 app = FastAPI()
 
@@ -55,40 +49,68 @@ async def health_check():
     return {"status": "healthy"}
 
 # Rotas para Alunos
-@app.post("/alunos", response_model=AlunoCreate)
+@app.post("/alunos", response_model=AlunoResponse)
 async def create_aluno(
     aluno: AlunoCreate,
     db: Session = Depends(get_db)
 ):
     try:
+        print(f"Recebendo dados do aluno: {aluno.dict()}")
+
+        # Validações básicas
+        if not aluno.nome or len(aluno.nome.strip()) < 3:
+            raise HTTPException(status_code=400, detail="Nome deve ter pelo menos 3 caracteres")
+
+        if not aluno.data_nascimento:
+            raise HTTPException(status_code=400, detail="Data de nascimento é obrigatória")
+
         # Validar data de nascimento (mínimo 5 anos)
         hoje = date.today()
         idade = hoje.year - aluno.data_nascimento.year - ((hoje.month, hoje.day) < (aluno.data_nascimento.month, aluno.data_nascimento.day))
         if idade < 5:
             raise HTTPException(status_code=400, detail="O aluno deve ter no mínimo 5 anos de idade")
 
-        if aluno.turma_id:
-            # Verifica se a turma existe
+        # Validar turma se fornecida
+        if aluno.turma_id is not None:
             turma = db.query(Turma).filter(Turma.id == aluno.turma_id).first()
             if not turma:
-                raise HTTPException(status_code=400, detail="Turma não encontrada")
+                raise HTTPException(status_code=400, detail=f"Turma com ID {aluno.turma_id} não encontrada")
             
             # Verifica capacidade da turma
             alunos_na_turma = db.query(Aluno).filter(Aluno.turma_id == turma.id).count()
             if alunos_na_turma >= turma.capacidade:
                 raise HTTPException(status_code=400, detail=f"Turma {turma.nome} já está em sua capacidade máxima")
-        
-        db_aluno = Aluno(**aluno.dict())
-        db.add(db_aluno)
-        db.commit()
-        db.refresh(db_aluno)
-        return db_aluno
+
+        # Verificar se já existe aluno com o mesmo email
+        if aluno.email:
+            existing_email = db.query(Aluno).filter(Aluno.email == aluno.email).first()
+            if existing_email:
+                raise HTTPException(status_code=400, detail="Este email já está cadastrado")
+
+        # Criar o aluno
+        try:
+            db_aluno = Aluno(
+                nome=aluno.nome,
+                data_nascimento=aluno.data_nascimento,
+                email=aluno.email,
+                status=aluno.status,
+                turma_id=aluno.turma_id
+            )
+            db.add(db_aluno)
+            db.commit()
+            db.refresh(db_aluno)
+            print(f"Aluno criado com sucesso: {db_aluno.id}")
+            return db_aluno
+        except Exception as e:
+            db.rollback()
+            print(f"Erro ao salvar no banco: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Erro ao salvar no banco de dados: {str(e)}")
+
     except HTTPException as he:
-        db.rollback()
         raise he
     except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"Erro ao criar aluno: {str(e)}")
+        print(f"Erro inesperado: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro inesperado: {str(e)}")
 
 @app.get("/alunos")
 async def read_alunos(
@@ -112,12 +134,18 @@ async def read_alunos(
     return alunos
 
 # Rotas para Turmas
-class TurmaCreate(BaseModel):
+class TurmaBase(BaseModel):
     nome: str
     capacidade: int
 
     class Config:
         orm_mode = True
+
+class TurmaCreate(TurmaBase):
+    pass
+
+class TurmaResponse(TurmaBase):
+    id: int
 
 @app.post("/turmas/seed")
 async def seed_turmas(db: Session = Depends(get_db)):
@@ -159,11 +187,14 @@ async def create_turma(
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.get("/turmas")
+@app.get("/turmas", response_model=List[TurmaResponse])
 async def read_turmas(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    turmas = db.query(Turma).offset(skip).limit(limit).all()
-    return turmas
+    try:
+        turmas = db.query(Turma).offset(skip).limit(limit).all()
+        return turmas
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar turmas: {str(e)}")

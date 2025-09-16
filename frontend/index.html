@@ -18,6 +18,12 @@
         </div>
     </header>
 
+    <!-- Banner de status do backend -->
+    <div id="backendStatus" class="backend-status hidden" role="status" aria-live="polite">
+        <p id="backendStatusMsg">Backend offline — algumas funcionalidades estão indisponíveis.</p>
+        <button id="retryBackendBtn" class="btn-primary">Tentar reconectar</button>
+    </div>
+
     <main class="main-content">
         <aside class="sidebar">
             <section class="filters">
@@ -71,5 +77,7 @@
     </div>
 
     <script src="scripts.js"></script>
+    <!-- Toast container -->
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 </body>
 </html>
