@@ -12,6 +12,7 @@
     box-sizing: border-box;
 }
 
+
 body {
     font-family: 'Roboto', sans-serif;
     background-color: var(--background);
@@ -52,6 +53,32 @@ body {
     padding: 2rem;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.stats-small span {
+    margin-left: 1rem;
+    font-weight: 500;
+    color: var(--primary);
+}
+
+.students-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.student-card {
+    background: #fff;
+    border: 1px solid #e6eef8;
+    padding: 1rem;
+    border-radius: 8px;
 }
 
 .search-container input {

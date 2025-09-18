@@ -198,3 +198,19 @@ async def read_turmas(
         return turmas
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar turmas: {str(e)}")
+
+
+@app.delete('/alunos/{aluno_id}', status_code=204)
+async def delete_aluno(aluno_id: int, db: Session = Depends(get_db)):
+    try:
+        aluno = db.query(Aluno).filter(Aluno.id == aluno_id).first()
+        if not aluno:
+            raise HTTPException(status_code=404, detail=f'Aluno com id {aluno_id} não encontrado')
+        db.delete(aluno)
+        db.commit()
+        return
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f'Erro ao excluir aluno: {str(e)}')

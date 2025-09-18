@@ -7,6 +7,10 @@ function initializeApp() {
     // Teste de conexão com o backend e atualiza UI
     checkBackendHealth();
 
+    // Atualiza badge da fila offline
+    updateQueueBadge();
+    setHeaderQueueCount();
+
     // Inicializar busca
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
@@ -26,22 +30,146 @@ function initializeApp() {
 // Estado simples para backend disponível
 let backendAvailable = false;
 
+// Offline queue stored in localStorage
+const OFFLINE_QUEUE_KEY = 'offline_alunos_queue';
+
+function getOfflineQueue() {
+    try { return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]'); }
+    catch { return []; }
+}
+
+function pushOfflineQueue(item) {
+    const q = getOfflineQueue();
+    q.push(item);
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q));
+    updateQueueBadge();
+}
+
+function clearOfflineQueue() {
+    localStorage.removeItem(OFFLINE_QUEUE_KEY);
+    updateQueueBadge();
+}
+
+function updateQueueBadge() {
+    const q = getOfflineQueue();
+    const statusEl = document.getElementById('backendStatus');
+    if (!statusEl) return;
+    const msg = document.getElementById('backendStatusMsg');
+    const syncBtn = document.getElementById('syncQueueBtn');
+    if (q.length > 0) {
+        msg.textContent = `Backend offline — ${q.length} cadastro(s) pendente(s).`;
+        if (syncBtn) syncBtn.classList.remove('hidden');
+    }
+}
+
+// update badge in header for queue count
+function setHeaderQueueCount() {
+    const q = getOfflineQueue();
+    const badge = document.getElementById('queueCount');
+    if (!badge) return;
+    badge.textContent = q.length;
+    if (q.length === 0) badge.style.display = 'none'; else badge.style.display = 'inline-block';
+}
+
+// Queue modal controls ---------------------------------------------------
+// Elements exist in index.html: #queueModal, #queueList, #closeQueueBtn, #syncNowBtn
+function openQueueModal() {
+    const queueModal = document.getElementById('queueModal');
+    if (!queueModal) return;
+    renderQueueItems();
+    queueModal.classList.remove('hidden');
+    queueModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeQueueModal() {
+    const queueModal = document.getElementById('queueModal');
+    if (!queueModal) return;
+    queueModal.classList.add('hidden');
+    queueModal.setAttribute('aria-hidden', 'true');
+}
+
+function renderQueueItems() {
+    const queueListEl = document.getElementById('queueList');
+    if (!queueListEl) return;
+    const items = getOfflineQueue() || [];
+    queueListEl.innerHTML = '';
+    if (items.length === 0) {
+        queueListEl.innerHTML = '<p style="color:#555">Nenhum cadastro pendente.</p>';
+        return;
+    }
+    items.forEach((it, idx) => {
+        const row = document.createElement('div');
+        row.className = 'queue-item';
+        const left = document.createElement('div');
+        left.innerHTML = `<div><strong>${escapeHtml(it.nome)}</strong></div><div class="queue-meta">${escapeHtml(it.email || '')} — Turma: ${escapeHtml(it.turma_nome || String(it.turma_id) || 'N/A')}</div>`;
+        const right = document.createElement('div');
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'btn-secondary';
+        removeBtn.textContent = 'Remover';
+        removeBtn.onclick = () => { removeQueueItem(idx); };
+        right.appendChild(removeBtn);
+        row.appendChild(left);
+        row.appendChild(right);
+        queueListEl.appendChild(row);
+    });
+}
+
+function removeQueueItem(index) {
+    const q = getOfflineQueue();
+    if (!q || index < 0 || index >= q.length) return;
+    q.splice(index, 1);
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q));
+    updateQueueBadge();
+    renderQueueItems();
+    showToast('Item removido da fila');
+}
+
+// Wire buttons if present
+document.addEventListener('DOMContentLoaded', () => {
+    const openQueueBtn = document.getElementById('openQueueBtn');
+    if (openQueueBtn) openQueueBtn.addEventListener('click', openQueueModal);
+    const closeQueueBtn = document.getElementById('closeQueueBtn');
+    if (closeQueueBtn) closeQueueBtn.addEventListener('click', closeQueueModal);
+    const syncNowBtn = document.getElementById('syncNowBtn');
+    if (syncNowBtn) syncNowBtn.addEventListener('click', async () => {
+        await syncOfflineQueue();
+        renderQueueItems();
+    });
+});
+
+// small helper to escape text for insertion
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return String(unsafe).replace(/[&<>"']/g, function(m) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#039;"}[m]; });
+}
+
 function showBackendStatus(available) {
     const statusEl = document.getElementById('backendStatus');
     const msg = document.getElementById('backendStatusMsg');
     const retryBtn = document.getElementById('retryBackendBtn');
+    const syncBtn = document.getElementById('syncQueueBtn');
     if (!statusEl) return;
 
     if (available) {
         backendAvailable = true;
         statusEl.classList.add('hidden');
         if (retryBtn) retryBtn.removeEventListener('click', checkBackendHealth);
+        if (syncBtn) syncBtn.classList.add('hidden');
     } else {
         backendAvailable = false;
         msg.textContent = 'Backend offline — algumas funcionalidades estão indisponíveis.';
         statusEl.classList.remove('hidden');
         if (retryBtn) retryBtn.addEventListener('click', checkBackendHealth);
+        if (syncBtn) {
+            syncBtn.classList.remove('hidden');
+            syncBtn.addEventListener('click', async () => {
+                await syncOfflineQueue();
+            });
+        }
     }
+    // update queue counts in UI
+    updateQueueBadge();
+    setHeaderQueueCount();
 }
 
 async function checkBackendHealth() {
@@ -225,52 +353,132 @@ function validateBirthDate(birthDate) {
     const age = today.getFullYear() - date.getFullYear();
     return age >= 5;
 }
+// Toast utility
+function showToast(message, timeout = 3000) {
+    const toast = document.getElementById('toast');
+    if (!toast) {
+        alert(message);
+        return;
+    }
+    toast.textContent = message;
+    toast.classList.remove('hidden');
+    setTimeout(() => toast.classList.add('hidden'), timeout);
+}
+
+// Sincroniza fila offline
+async function syncOfflineQueue() {
+    const q = getOfflineQueue();
+    if (!q.length) return;
+    console.log('Sincronizando fila offline:', q.length);
+    for (const item of q) {
+        try {
+            // Suporta operações de delete enfileiradas: { op: 'delete', id: number }
+            if (item && item.op === 'delete' && item.id) {
+                const res = await fetch(`http://localhost:8000/alunos/${item.id}`, { method: 'DELETE' });
+                if (res.ok || res.status === 204) {
+                    console.log('Delete sincronizado:', item.id);
+                } else {
+                    console.warn('Falha ao sincronizar delete:', await res.text());
+                }
+                continue;
+            }
+
+            // default: create aluno
+            const res = await fetch('http://localhost:8000/alunos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item)
+            });
+            if (res.ok) {
+                console.log('Item sincronizado:', item.nome);
+            } else {
+                console.warn('Falha ao sincronizar item:', await res.text());
+            }
+        } catch (err) {
+            console.error('Erro ao sincronizar item:', err);
+            return; // se der erro de rede, interrompe para tentar depois
+        }
+    }
+    clearOfflineQueue();
+    showToast('Fila offline sincronizada.');
+}
+
+// Renderiza lista de alunos simples
+function renderStudents(alunos) {
+    const container = document.getElementById('studentsList');
+    const totalEl = document.getElementById('totalAlunos');
+    const ativosEl = document.getElementById('ativosAlunos');
+    if (!container) return;
+    container.innerHTML = '';
+    const ativos = alunos.filter(a => a.status === 'ativo').length;
+    if (totalEl) totalEl.textContent = `Total: ${alunos.length}`;
+    if (ativosEl) ativosEl.textContent = `Ativos: ${ativos}`;
+    alunos.forEach(a => {
+        const card = document.createElement('div');
+        card.className = 'student-card';
+    const alunoId = a.id ? String(a.id) : '';
+    card.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;"><strong>${escapeHtml(a.nome)}</strong><button class=\"btn-secondary\" data-id=\"${alunoId}\">Excluir</button></div><div>${escapeHtml(a.email || '')}</div><div>Turma: ${escapeHtml(String(a.turma_id || '—'))}</div>`;
+    // wire delete button
+    const delBtn = card.querySelector('button[data-id]');
+    if (delBtn) delBtn.addEventListener('click', deleteStudent);
+        container.appendChild(card);
+    });
+}
 
 // Manipular envio do formulário
 async function handleStudentRegistration(event) {
     event.preventDefault();
-    
+
     const formData = new FormData(event.target);
     const birthDate = formData.get('data_nascimento');
-    
+
     if (!validateBirthDate(birthDate)) {
-        alert('O aluno deve ter no mínimo 5 anos de idade.');
+        showToast('O aluno deve ter no mínimo 5 anos de idade.');
         return;
     }
-    
+
     const turmaId = formData.get('turma_id');
-    
+
     // Valida os campos obrigatórios
     const nome = formData.get('nome')?.trim();
     if (!nome || nome.length < 3 || nome.length > 80) {
-        alert('O nome deve ter entre 3 e 80 caracteres');
+        showToast('O nome deve ter entre 3 e 80 caracteres');
         return;
     }
 
     const email = formData.get('email')?.trim();
     if (email && !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-        alert('Por favor, insira um email válido');
+        showToast('Por favor, insira um email válido');
         return;
     }
 
-    // Garantir que a data de nascimento está presente
     const dataNascimento = formData.get('data_nascimento');
     if (!dataNascimento) {
-        alert('Por favor, insira a data de nascimento');
+        showToast('Por favor, insira a data de nascimento');
         return;
     }
 
     const studentData = {
         nome: nome,
-        data_nascimento: formData.get('data_nascimento'),
+        data_nascimento: dataNascimento,
         email: email || null,
         turma_id: turmaId ? parseInt(turmaId) : null,
-        status: 'inativo' // status inicial
+        status: 'inativo'
     };
-    
+
     try {
         console.log('Enviando dados do aluno:', studentData);
-        
+
+        if (!backendAvailable) {
+            pushOfflineQueue(studentData);
+            showToast('Salvo offline — será sincronizado quando o backend voltar.');
+            closeModal();
+            event.target.reset();
+            state.alunos.push(studentData);
+            renderStudents(state.alunos);
+            return;
+        }
+
         const response = await fetch('http://localhost:8000/alunos', {
             method: 'POST',
             headers: {
@@ -279,33 +487,68 @@ async function handleStudentRegistration(event) {
             body: JSON.stringify(studentData)
         });
 
-        console.log('Status da resposta:', response.status);
         const data = await response.json();
-        console.log('Resposta completa:', data);
-
         if (response.ok) {
-            alert('Aluno cadastrado com sucesso!');
+            showToast('Aluno cadastrado com sucesso!');
             closeModal();
             event.target.reset();
-            // Atualizar lista de alunos
             const alunos = await fetchAlunos();
             state.alunos = alunos;
+            renderStudents(alunos);
         } else {
             console.error('Erro da API:', data);
-            if (data.detail) {
-                alert(`Erro ao cadastrar aluno: ${data.detail}`);
-            } else if (typeof data === 'object') {
-                // Mostrar todos os erros de validação
-                const errors = Object.entries(data)
-                    .map(([campo, erro]) => `${campo}: ${erro}`)
-                    .join('\n');
-                alert(`Erros de validação:\n${errors}`);
-            } else {
-                alert(`Erro ao cadastrar aluno: ${JSON.stringify(data)}`);
-            }
+            const message = data.detail || JSON.stringify(data) || 'Erro desconhecido';
+            showToast(`Erro ao cadastrar: ${message}`, 5000);
         }
     } catch (error) {
         console.error('Erro ao cadastrar aluno:', error);
-        alert('Erro ao cadastrar aluno. Verifique o console para mais detalhes.');
+        showToast('Erro ao cadastrar aluno. Verifique o console.', 5000);
+    }
+}
+
+// delete student handler
+async function deleteStudent(event) {
+    event.preventDefault();
+    const btn = event.currentTarget;
+    const id = btn.getAttribute('data-id');
+    // if no id then it's a local-only entry; attempt to remove from offline queue
+    if (!id) {
+        const name = btn.closest('.student-card')?.querySelector('strong')?.textContent;
+        // remove from offline queue where matches nome
+        const q = getOfflineQueue();
+        const idx = q.findIndex(x => x && x.nome === name && !x.op);
+        if (idx >= 0) {
+            q.splice(idx, 1);
+            localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q));
+            updateQueueBadge();
+            setHeaderQueueCount();
+        }
+        btn.closest('.student-card')?.remove();
+        showToast('Cadastro local removido');
+        return;
+    }
+
+    if (!backendAvailable) {
+        // queue delete op
+        pushOfflineQueue({ op: 'delete', id: parseInt(id) });
+        btn.closest('.student-card')?.remove();
+        showToast('Remoção salva na fila — será processada quando online');
+        return;
+    }
+
+    try {
+        const res = await fetch(`http://localhost:8000/alunos/${id}`, { method: 'DELETE' });
+        if (res.status === 204 || res.ok) {
+            showToast('Aluno excluído');
+            const alunos = await fetchAlunos();
+            state.alunos = alunos;
+            renderStudents(alunos);
+        } else {
+            const text = await res.text();
+            showToast('Falha ao excluir: ' + text, 5000);
+        }
+    } catch (err) {
+        console.error('Erro ao excluir aluno:', err);
+        showToast('Erro ao excluir aluno. Verifique o console.');
     }
 }

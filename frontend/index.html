@@ -2,9 +2,10 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestão Escolar</title>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+        <div style="display:flex;gap:8px;align-items:center;">
+            <button onclick="openModal()">Novo Aluno</button>
+            <button id="openQueueBtn" class="btn-secondary" title="Ver fila pendente">Fila <span id="queueCount" class="queue-badge">0</span></button>
+        </div>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -22,6 +23,19 @@
     <div id="backendStatus" class="backend-status hidden" role="status" aria-live="polite">
         <p id="backendStatusMsg">Backend offline — algumas funcionalidades estão indisponíveis.</p>
         <button id="retryBackendBtn" class="btn-primary">Tentar reconectar</button>
+        <button id="syncQueueBtn" class="btn-secondary hidden">Sincronizar agora</button>
+    </div>
+
+    <!-- Modal de fila offline -->
+    <div id="queueModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-content">
+            <h2>Fila de cadastros pendentes</h2>
+            <div id="queueList" style="max-height:300px; overflow:auto;"></div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+                <button id="closeQueueBtn" class="btn-secondary">Fechar</button>
+                <button id="syncNowBtn" class="btn-primary">Sincronizar agora</button>
+            </div>
+        </div>
     </div>
 
     <main class="main-content">
@@ -37,7 +51,16 @@
         </aside>
 
         <section class="content">
-            <!-- Conteúdo principal será carregado aqui -->
+            <div class="content-header">
+                <h2>Alunos</h2>
+                <div id="stats" class="stats-small">
+                    <span id="totalAlunos">Total: 0</span>
+                    <span id="ativosAlunos">Ativos: 0</span>
+                </div>
+            </div>
+            <div id="studentsList" class="students-list">
+                <!-- Lista de alunos será renderizada aqui -->
+            </div>
         </section>
     </main>
 
